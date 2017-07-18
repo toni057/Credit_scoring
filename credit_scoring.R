@@ -1,3 +1,7 @@
+library(ggplot2)
+library(gridExtra)
+library(Hmisc)
+
 
 create.factor <- function(x, y, type = "categorical", cuts, q, useNA = TRUE, range = c(0, Inf), subset = 1:length(x), plot = TRUE) {
    # Create a factor variable.
