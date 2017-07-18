@@ -1,7 +1,7 @@
 library(ggplot2)
 library(gridExtra)
 library(Hmisc)
-
+library(plyr)
 
 create.factor <- function(x, y, type = "categorical", cuts, q, useNA = TRUE, range = c(0, Inf), subset = 1:length(x), plot = TRUE) {
    # Create a factor variable.
@@ -289,7 +289,7 @@ woe.plot <- function(x, y, name="", angle.x = 0, hjust.x = 0.5, subset = 1:lengt
       ylab("Weight of evidence") + 
       theme(axis.text.x = element_text(hjust = hjust.x, size = 12, angle = angle.x)) + 
       theme(axis.text.y = element_text(size = 12)) +
-      geom_hline(color="grey20")
+      geom_hline(color="grey20", yintercept = 0)
    
    return (p)
 }
@@ -304,16 +304,64 @@ hist.woe.plot <- function(x, y, name="", angle.x=0, hjust.x=0.5, subset=rep(TRUE
 }
 
 
+split.data.2 <- function(x, split.ratio = c(0.7, 0.3, 0), ratio = 0.1, type = 'none', seed = NULL) {
+   
+   
+   sample.data <- function(event, nonevent, init.ratio, final.ratio, type) {
+      # over/undersampling
+      
+      tot <- length(event) + length(nonevent)
+      
+      if (type == 'oversample') {
+         # event <- c(event, sample(event, round(tot * (1 - init.ratio) * final.ratio / (1 - final.ratio) - tot * init.ratio), replace = T))
+         # event <- c(event, sample(event, (1-init.ratio) / (1-final.ratio) * tot, replace = T))
+         event <- c(event, sample(event, (final.ratio-init.ratio) / (1-final.ratio) * tot, replace = T))
+         wh <- c(nonevent, event)
+      } else if (type == 'undersample') {
+         nonevent <- sample(nonevent, init.ratio / final.ratio * (1 - final.ratio) * tot, replace = F)
+         wh <- c(nonevent, event)
+      } else {
+         print("Error sampling type - needs to be oversample or undersample.")
+         wh <- 1:tot
+      }
+      return (wh)
+   }
+   
+   if (!is.null(seed)) {
+      set.seed(seed)
+   }
+   
+   
+   names = c("train", "valid", "test")[which(split.ratio > 0)]
+   split.ratio <- split.ratio[split.ratio>0]
+   
+   # wh_0 <- sample(which(x == 0), length(x) - sum(x), replace = F)
+   # wh_1 <- sample(which(x == 1), sum(x), replace = F)
+   
+   wh_0 <- which(x == 0)
+   wh_1 <- which(x == 1)
+   
+   class_1 <- c(0, round(cumsum(split.ratio * length(wh_1))))
+   class_0 <- c(0, round(cumsum(split.ratio * length(wh_0))))
+   
+   samples <- list()
+   
+   # split to train/validation/test and apply over/undersample
+   for (i in 2:length(class_1)) {
+      samples[[names[i-1]]] <- list(event = wh_1[(1 + class_1[i-1]):class_1[i]],
+                                    nonevent = wh_0[(1 + class_0[i-1]):class_0[i]])
+      samples[[names[i-1]]] <- sample.data(samples[[names[[i-1]]]]$event, samples[[names[i-1]]]$nonevent, 
+                                           init.ratio = mean(x), final.ratio = ratio, type = type)
+   }
+   
+   samples
+}
+
 
 split.data <- function(x, split.ratio = c(.7, 0, .3), ratio = 0.1, oversample = TRUE, seed = NULL) {
-   # FSplitting data into modeling, validation and testing datasets. Does oversampling if specified.
+   # Splitting data into modeling, validation and testing datasets. Does oversampling if specified.
    # oversamoling included
-   # oversample - postotak na koji treba napraviti oversample, pretpostavlja se  nebalansiran dataset
-   
-   # 	if ( (!(goal %in% names(data)) ) {
-   # 		print("Ne postoji ciljna varijabla. Terminate.")
-   # 		break
-   # 	}
+   # oversample - percentage
    
    #set seed
    if (!is.null(seed)) {
